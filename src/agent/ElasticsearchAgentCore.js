@@ -8,6 +8,7 @@ import ConsensusTool from './tools/elasticsearch/ConsensusTool';
 import SchemaManager from '../services/SchemaManager';
 import ESClusterManager from '../services/ESClusterManager';
 import { QueryLibraryManager } from '../services/QueryLibraryManager';
+import browserBeeIntegration from './BrowserBeeIntegration';
 
 /**
  * ElasticsearchAgentCore
@@ -41,6 +42,30 @@ class ElasticsearchAgentCore {
     
     this.activeCluster = null;
     this.lastGeneratedQueries = [];
+    this.useBrowserBee = config.useBrowserBee !== false; // Default to true
+    
+    // Initialize BrowserBee integration if available
+    this.initializeBrowserBee();
+  }
+  
+  /**
+   * Initialize BrowserBee integration
+   */
+  async initializeBrowserBee() {
+    if (!this.useBrowserBee) return;
+    
+    try {
+      const initialized = await browserBeeIntegration.initialize(this.config);
+      if (initialized) {
+        console.log('BrowserBee integration initialized successfully');
+      } else {
+        console.warn('BrowserBee integration failed to initialize, falling back to local tools');
+        this.useBrowserBee = false;
+      }
+    } catch (error) {
+      console.error('Error initializing BrowserBee integration:', error);
+      this.useBrowserBee = false;
+    }
   }
   
   /**
@@ -80,73 +105,114 @@ class ElasticsearchAgentCore {
         throw new Error('No active Elasticsearch cluster configured');
       }
       
-      // 1. Get schema information
-      const schema = await this.getSchemaForActiveCluster();
-      
-      // 2. Get query examples from library
-      const queryExamples = await this.queryLibraryManager.getQueryExamples();
-      
-      // Build context object for tools
-      const context = {
-        userInput,
-        schema,
-        queryExamples,
-        clusterInfo: this.activeCluster
-      };
-      
-      // 3. Parse intent using the intent parsing tool
-      const intent = await this.tools.intentParsing.execute({
-        text: userInput,
-        context
-      });
-      console.log('Intent parsed:', intent);
-      
-      // 4. Generate query perspectives
-      const perspectives = await this.tools.perspectiveGeneration.execute({
-        intent,
-        context
-      });
-      console.log('Generated perspectives:', perspectives);
-      
-      // 5. Build queries based on each perspective
-      const queries = [];
-      for (const perspective of perspectives) {
-        const query = await this.tools.queryBuilding.execute({
-          intent,
-          perspective,
-          context
-        });
+      // Try BrowserBee integration first if available
+      if (this.useBrowserBee && browserBeeIntegration.isAvailable()) {
+        console.log('Using BrowserBee agent for query generation');
         
-        // 6. Validate each query
-        const validation = await this.tools.validation.execute({
-          query: query.query,
-          context
-        });
-        
-        queries.push({
-          id: `query_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-          query: query.query,
-          explanation: query.explanation,
-          perspective,
-          validation
-        });
+        try {
+          const schema = await this.getSchemaForActiveCluster();
+          const context = {
+            schema,
+            clusterInfo: this.activeCluster,
+            queryExamples: await this.queryLibraryManager.getQueryExamples()
+          };
+          
+          const browserBeeResult = await browserBeeIntegration.generateQuery(
+            userInput, 
+            this.activeCluster.id, 
+            context
+          );
+          
+          if (browserBeeResult.success) {
+            this.lastGeneratedQueries = browserBeeResult.queries;
+            return browserBeeResult.queries;
+          } else if (!browserBeeResult.fallback) {
+            throw new Error(browserBeeResult.error);
+          }
+          
+          console.warn('BrowserBee failed, falling back to local tools');
+        } catch (error) {
+          console.warn('BrowserBee error, falling back to local tools:', error);
+        }
       }
-      console.log('Generated queries:', queries);
       
-      // 7. Rank and provide consensus
-      const rankedQueries = await this.tools.consensus.execute({
-        queries,
-        context
-      });
+      // Fallback to local tool chain
+      console.log('Using local tool chain for query generation');
+      return await this.generateQueryWithLocalTools(userInput, clusterId);
       
-      // Store the result
-      this.lastGeneratedQueries = rankedQueries;
-      
-      return rankedQueries;
     } catch (error) {
       console.error('Error generating query:', error);
       throw error;
     }
+  }
+  
+  /**
+   * Generate query using local tools (fallback method)
+   */
+  async generateQueryWithLocalTools(userInput, clusterId = null) {
+    // 1. Get schema information
+    const schema = await this.getSchemaForActiveCluster();
+    
+    // 2. Get query examples from library
+    const queryExamples = await this.queryLibraryManager.getQueryExamples();
+    
+    // Build context object for tools
+    const context = {
+      userInput,
+      schema,
+      queryExamples,
+      clusterInfo: this.activeCluster
+    };
+    
+    // 3. Parse intent using the intent parsing tool
+    const intent = await this.tools.intentParsing.execute({
+      text: userInput,
+      context
+    });
+    console.log('Intent parsed:', intent);
+    
+    // 4. Generate query perspectives
+    const perspectives = await this.tools.perspectiveGeneration.execute({
+      intent,
+      context
+    });
+    console.log('Generated perspectives:', perspectives);
+    
+    // 5. Build queries based on each perspective
+    const queries = [];
+    for (const perspective of perspectives) {
+      const query = await this.tools.queryBuilding.execute({
+        intent,
+        perspective,
+        context
+      });
+      
+      // 6. Validate each query
+      const validation = await this.tools.validation.execute({
+        query: query.query,
+        context
+      });
+      
+      queries.push({
+        id: `query_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        query: query.query,
+        explanation: query.explanation,
+        perspective,
+        validation
+      });
+    }
+    console.log('Generated queries:', queries);
+    
+    // 7. Rank and provide consensus
+    const rankedQueries = await this.tools.consensus.execute({
+      queries,
+      context
+    });
+    
+    // Store the result
+    this.lastGeneratedQueries = rankedQueries;
+    
+    return rankedQueries;
   }
   
   /**
@@ -232,6 +298,22 @@ class ElasticsearchAgentCore {
       console.error('Error getting cluster health:', error);
       throw error;
     }
+  }
+  
+  /**
+   * Get the last generated queries
+   * 
+   * @returns {Array} - Array of query results
+   */
+  getLastGeneratedQueries() {
+    return this.lastGeneratedQueries;
+  }
+  
+  /**
+   * Clear the last generated queries
+   */
+  clearLastGeneratedQueries() {
+    this.lastGeneratedQueries = [];
   }
 }
 
