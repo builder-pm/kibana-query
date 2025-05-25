@@ -7,18 +7,23 @@
     "16": "assets/icons/icon-16.png",
     "48": "assets/icons/icon-48.png",
     "128": "assets/icons/icon-128.png"
-  },
-  "action": {
+  },  "action": {
     "default_icon": {
       "16": "assets/icons/icon-16.png",
       "48": "assets/icons/icon-48.png"
     },
-    "default_popup": "index.html",
-    "default_title": "Elasticsearch Query Helper"
+    "default_title": "Open Elasticsearch Query Helper"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://*/",
