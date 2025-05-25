@@ -1,0 +1,114 @@
+sequenceDiagram
+    participant User
+    participant SidePanel as ElasticsearchSidePanel
+    participant BSW as Background Service Worker
+    participant ESHandler as ESMessageHandler
+    participant ESAgent as ElasticsearchAgentCore
+    participant Tools as Agent Tools
+    participant CM as ESClusterManager
+    participant SM as SchemaManager
+    participant ES as Elasticsearch API
+    
+    User->>SidePanel: Enter natural language query
+    SidePanel->>BSW: Send message (GENERATE_ES_QUERY)
+    BSW->>ESHandler: handleMessage(payload)
+    ESHandler->>ESAgent: generateQuery(input, clusterId)
+    
+    ESAgent->>CM: getClient(clusterId)
+    CM->>ESAgent: Return ESClient instance
+    
+    ESAgent->>SM: getSchema(clusterId, index)
+    alt Schema in cache
+        SM->>ESAgent: Return cached schema
+    else Schema not in cache
+        SM->>ES: Get mappings and settings
+        ES->>SM: Return mappings and settings
+        SM->>SM: analyzeSchema(mappings, settings)
+        SM->>ESAgent: Return analyzed schema
+    end
+    
+    ESAgent->>ESAgent: buildContext(input, schema)
+    
+    ESAgent->>Tools: execute("parseIntent", {input, context})
+    Tools->>ESAgent: Return ParsedIntent
+    
+    ESAgent->>Tools: execute("analyzeSchema", {intent, schema})
+    Tools->>ESAgent: Return SchemaAnalysisResult
+    
+    ESAgent->>Tools: execute("buildQuery", {intent, schemaAnalysis})
+    Tools->>ESAgent: Return ESQuery
+    
+    ESAgent->>Tools: execute("validateQuery", {query, schema})
+    Tools->>ESAgent: Return ValidationResult
+    
+    ESAgent->>Tools: execute("explainQuery", {query, validationResult})
+    Tools->>ESAgent: Return ExplanationResult
+    
+    ESAgent->>ESHandler: Return QueryResult[]
+    ESHandler->>BSW: Return GenerateQueryResponse
+    BSW->>SidePanel: Update UI with query results
+    SidePanel->>User: Display generated query with explanation
+    
+    sequenceDiagram
+    participant User
+    participant Settings as ClusterSettings
+    participant BSW as Background Service Worker
+    participant ESHandler as ESMessageHandler
+    participant CM as ESClusterManager
+    participant Config as ESConfigManager
+    participant ES as Elasticsearch API
+    
+    User->>Settings: Add new cluster
+    Settings->>BSW: Send message (ADD_CLUSTER)
+    BSW->>ESHandler: handleMessage(payload)
+    ESHandler->>CM: addCluster(config)
+    
+    CM->>CM: createClient(config)
+    CM->>ES: ping()
+    ES->>CM: Return connection status
+    
+    CM->>ES: info()
+    ES->>CM: Return cluster information
+    
+    CM->>Config: saveClusterConfig(config)
+    Config->>Config: encryptSensitiveData(config)
+    Config->>BSW: Save to chrome.storage.local
+    
+    CM->>ESHandler: Return cluster ID and status
+    ESHandler->>BSW: Return ClusterOperationResponse
+    BSW->>Settings: Update UI with new cluster
+    Settings->>User: Show success notification
+    
+    sequenceDiagram
+    participant SidePanel as ElasticsearchSidePanel
+    participant BSW as Background Service Worker
+    participant ESHandler as ESMessageHandler
+    participant SM as SchemaManager
+    participant CM as ESClusterManager
+    participant Client as ESClient
+    participant ES as Elasticsearch API
+    
+    SidePanel->>BSW: Send message (DISCOVER_SCHEMA)
+    BSW->>ESHandler: handleMessage(payload)
+    ESHandler->>SM: discoverSchema(clusterId, indexPattern)
+    
+    SM->>CM: getClient(clusterId)
+    CM->>SM: Return ESClient instance
+    
+    SM->>Client: getMapping(indexPattern)
+    Client->>ES: GET /{indexPattern}/_mapping
+    ES->>Client: Return mappings
+    Client->>SM: Return mappings
+    
+    SM->>Client: getSettings(indexPattern)
+    Client->>ES: GET /{indexPattern}/_settings
+    ES->>Client: Return settings
+    Client->>SM: Return settings
+    
+    SM->>SM: analyzeSchema(mappings, settings)
+    SM->>SM: extractFields(mappings)
+    SM->>SM: identifyFieldTypes(mappings)
+    
+    SM->>ESHandler: Return ESSchema
+    ESHandler->>BSW: Return SchemaDiscoveryResponse
+    BSW->>SidePanel: Update UI with schema information

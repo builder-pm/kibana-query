@@ -1,0 +1,129 @@
+{
+  "sampleQueries": [
+    {
+      "id": "basic_source_search",
+      "description": "Find jobs from specific job board with recent crawl date",
+      "userIntent": "source-based filtering with time constraint",
+      "query": {
+        "query": {
+          "bool": {
+            "must": [
+              {"match": {"source_name.keyword": "Indeed_US"}},
+              {"term": {"is_deleted.keyword": "0"}}
+            ],
+            "filter": [
+              {"range": {"crawled_date": {"gte": "now-7d/d", "lte": "now"}}}
+            ]
+          }
+        },
+        "size": 50
+      },
+      "tags": ["source_filter", "date_range", "basic_search"],
+      "complexity": "simple",
+      "successRate": 95
+    },
+    {
+      "id": "geo_proximity_search",
+      "description": "Find jobs within 50km of Frankfurt",
+      "userIntent": "location-based proximity search",
+      "query": {
+        "query": {
+          "bool": {
+            "must": [
+              {"term": {"is_deleted.keyword": "0"}},
+              {"term": {"is_duplicate": false}}
+            ],
+            "filter": [
+              {
+                "geo_distance": {
+                  "distance": "50km",
+                  "standardized_geo_point": {
+                    "lat": 50.1109,
+                    "lon": 8.6821
+                  }
+                }
+              },
+              {"range": {"crawled_date": {"gte": "now-30d/d"}}}
+            ]
+          }
+        }
+      },
+      "tags": ["geo_search", "location", "proximity"],
+      "complexity": "medium",
+      "successRate": 88
+    },
+    {
+      "id": "skills_match_search",
+      "description": "Find software engineering jobs requiring Python and machine learning",
+      "userIntent": "skills and title matching",
+      "query": {
+        "query": {
+          "bool": {
+            "must": [
+              {"match": {"job_title": "software engineer"}},
+              {"match": {"job_description": "Python"}},
+              {"match": {"job_description": "machine learning"}},
+              {"term": {"is_deleted.keyword": "0"}}
+            ],
+            "filter": [
+              {"range": {"crawled_date": {"gte": "now-14d/d"}}}
+            ]
+          }
+        }
+      },
+      "tags": ["skills", "job_title", "technology"],
+      "complexity": "medium",
+      "successRate": 92
+    },
+    {
+      "id": "company_filter_search",
+      "description": "Find all jobs at Google or Microsoft",
+      "userIntent": "company-specific job search",
+      "query": {
+        "query": {
+          "bool": {
+            "must": [
+              {
+                "terms": {
+                  "company_name.keyword": ["Google", "Microsoft", "Alphabet Inc."]
+                }
+              },
+              {"term": {"is_deleted.keyword": "0"}}
+            ],
+            "filter": [
+              {"range": {"crawled_date": {"gte": "now-30d/d"}}}
+            ]
+          }
+        }
+      },
+      "tags": ["company", "multiple_values", "exact_match"],
+      "complexity": "simple",
+      "successRate": 96
+    },
+    {
+      "id": "salary_range_search",
+      "description": "Find jobs with salary information excluding N/A values",
+      "userIntent": "salary-based filtering",
+      "query": {
+        "query": {
+          "bool": {
+            "must": [
+              {"exists": {"field": "raw_salary"}},
+              {"term": {"is_deleted.keyword": "0"}}
+            ],
+            "must_not": [
+              {"match_phrase": {"raw_salary": "NA"}},
+              {"match_phrase": {"raw_salary": "#N/A"}}
+            ],
+            "filter": [
+              {"range": {"crawled_date": {"gte": "now-7d/d"}}}
+            ]
+          }
+        }
+      },
+      "tags": ["salary", "exists", "exclusion"],
+      "complexity": "medium",
+      "successRate": 85
+    }
+  ]
+}

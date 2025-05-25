@@ -1,0 +1,119 @@
+{
+  "mappings": {
+    "properties": {
+      "job_title": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "company_name": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "location": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "standardized_geo_point": {
+        "type": "geo_point"
+      },
+      "standardized_location": {
+        "properties": {
+          "city": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword"
+              }
+            }
+          },
+          "country": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword"
+              }
+            }
+          },
+          "state": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword"
+              }
+            }
+          }
+        }
+      },
+      "job_description": {
+        "type": "text"
+      },
+      "skills": {
+        "type": "nested",
+        "properties": {
+          "name": {
+            "type": "keyword"
+          }
+        }
+      },
+      "raw_salary": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "posted_date": {
+        "type": "date"
+      },
+      "crawled_date": {
+        "type": "date"
+      },
+      "is_deleted": {
+        "type": "keyword"
+      },
+      "is_duplicate": {
+        "type": "boolean"
+      },
+      "source_name": {
+        "type": "keyword"
+      },
+      "country_code": {
+        "type": "keyword"
+      },
+      "url": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "seniority": {
+        "properties": {
+          "name": {
+            "type": "keyword"
+          }
+        }
+      },
+      "job_category": {
+        "type": "keyword"
+      }
+    }
+  },
+  "indexName": "jobs",
+  "version": "7.x",
+  "lastUpdated": "2025-01-20T00:00:00Z"
+}

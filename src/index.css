@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 25px;
+  transition: all 0.3s;
+  background-color: rgba(106, 115, 125, 0.2);
+  &:hover {
+    background-color: rgba(106, 115, 125, 0.27);
+  }
+}
+
+::-webkit-scrollbar-corner {
+  display: none;
+}
+
+/* Animation delays for loading dots */
+.animation-delay-200 {
+  animation-delay: 0.2s;
+}
+
+.animation-delay-400 {
+  animation-delay: 0.4s;
+}
+
+/* Custom styles for code blocks */
+pre {
+  position: relative;
+}
+
+pre code {
+  font-family: 'JetBrains Mono', monospace, Consolas, 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+/* Query result card styling */
+.query-result-card pre {
+  max-height: 300px;
+  transition: max-height 0.3s ease-in-out;
+}
+
+.query-result-card.expanded pre {
+  max-height: 600px;
+}
