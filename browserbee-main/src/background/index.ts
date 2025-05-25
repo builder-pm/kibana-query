@@ -91,16 +91,22 @@ function setupEventListeners(): void {
   // Open the side panel when the extension icon is clicked or Alt+Shift+B is pressed
   chrome.action.onClicked.addListener(async (tab) => {
     if (tab.id) {
-      logWithTimestamp(`Opening side panel for tab ${tab.id}`);
-      
+      logWithTimestamp(`Toolbar action clicked for tab ${tab.id}`); // Existing log
       try {
+        // Explicitly set the side panel options for the current tab
+        await chrome.sidePanel.setOptions({
+          tabId: tab.id,
+          path: 'sidepanel.html', // Should match manifest's side_panel.default_path
+          enabled: true
+        });
+        // Open the side panel for the current tab
         await chrome.sidePanel.open({ tabId: tab.id });
-        logWithTimestamp(`Side panel opened for tab ${tab.id}`);
+        logWithTimestamp(`Side panel open requested for tab ${tab.id}`); // Modified log
       } catch (error) {
-        logWithTimestamp(`Error opening side panel: ${String(error)}`, 'error');
+        logWithTimestamp(`Error interacting with side panel: ${String(error)}`, 'error'); // Existing log
       }
     } else {
-      logWithTimestamp('No tab ID available for action click', 'error');
+      logWithTimestamp('No tab ID available for action click', 'error'); // Existing log
     }
   });
   
