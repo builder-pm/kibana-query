@@ -1,0 +1,4 @@
+$ pwd
+/data/chats/xpvnc/workspace/react_template
+$ mkdir -p src/agent/tools/elasticsearch
+

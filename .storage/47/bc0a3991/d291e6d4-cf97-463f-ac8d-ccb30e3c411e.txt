@@ -1,0 +1,90 @@
+$ cd /data/chats/xpvnc/workspace/uploads/browserbee-main && ls -la
+total 6302
+drwxr-xr-x 244 root root 2162688 May 24 20:03 .
+drwxr-xr-x 245 root root 2166784 May 24 20:03 ..
+drwxr-xr-x   4 root root   12288 May 24 20:03 .github
+-rw-r--r--   1 root root     384 May 24 20:03 .gitignore
+-rw-r--r--   1 root root       0 May 24 20:03 .nojekyll
+-rw-r--r--   1 root root   12415 May 24 20:03 ARCHITECTURE.md
+-rw-r--r--   1 root root    1972 May 24 20:03 CONTRIBUTING.md
+-rw-r--r--   1 root root   11353 May 24 20:03 LICENSE
+-rw-r--r--   1 root root   12749 May 24 20:03 README.md
+-rw-r--r--   1 root root    2490 May 24 20:03 ROADMAP.md
+drwxr-xr-x  50 root root  200704 May 24 20:03 browserbee-main
+drwxr-xr-x  39 root root  745472 May 24 20:03 docs
+-rw-r--r--   1 root root  194763 May 24 20:03 package-lock.json
+-rw-r--r--   1 root root    1625 May 24 20:03 package.json
+drwxr-xr-x   9 root root   61440 May 24 20:03 public
+-rw-r--r--   1 root root    4562 May 24 20:03 reattach-button.png
+drwxr-xr-x 132 root root  856064 May 24 20:03 src
+-rw-r--r--   1 root root     387 May 24 20:03 tailwind.config.js
+-rw-r--r--   1 root root     568 May 24 20:03 tsconfig.json
+-rw-r--r--   1 root root    1099 May 24 20:03 vite.config.ts
+$ cd /data/chats/xpvnc/workspace/react_template && ls -la
+
+total 320125
+drwxr-xr-x    23 root root    208896 May 24 20:22 .
+drwxr-xr-x 19063 root root 165187584 May 24 20:23 ..
+-rw-r--r--     1 root root       253 Mar  5 03:46 .gitignore
+-rw-r--r--     1 root root      1185 Mar  5 03:46 README.md
+-rw-r--r--     1 root root      1476 Mar  5 03:46 eslint.config.js
+-rw-r--r--     1 root root       284 Mar  5 03:46 index.html
+drwxr-xr-x 18706 root root 162242560 May 24 20:22 node_modules
+-rw-r--r--     1 root root       957 Mar  5 03:46 package.json
+-rw-r--r--     1 root root    119234 Mar  5 03:46 pnpm-lock.yaml
+-rw-r--r--     1 root root        80 Mar  5 03:46 postcss.config.js
+drwxr-xr-x     7 root root     24576 Mar  5 07:04 public
+drwxr-xr-x     5 root root     16384 Mar  5 07:04 src
+-rw-r--r--     1 root root       170 Mar  5 03:46 tailwind.config.js
+-rw-r--r--     1 root root      1160 Mar  5 03:46 template_config.json
+-rw-r--r--     1 root root       163 Mar  5 03:46 vite.config.js
+$ cd /data/chats/xpvnc/workspace/react_template && pnpm i && pnpm run lint && pnpm run dev
+
+Lockfile is up to date, resolution step is skipped
+Packages: +393
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Done in 2.1s
+
+> react-template@0.0.0 lint /data/chats/xpvnc/workspace/react_template
+> eslint ./src --quiet
+
+
+/data/chats/xpvnc/workspace/react_template/src/agent/ElasticsearchAgentCore.js
+  20:35  error  'ESClusterManager' is not defined           no-undef
+  23:32  error  'SchemaManager' is not defined              no-undef
+  26:31  error  'QueryLibraryManager' is not defined        no-undef
+  32:31  error  'ErrorHandler' is not defined               no-undef
+  36:13  error  'IntentParsingTool' is not defined          no-undef
+  37:13  error  'PerspectiveGenerationTool' is not defined  no-undef
+  38:13  error  'QueryBuildingTool' is not defined          no-undef
+  39:13  error  'ValidationTool' is not defined             no-undef
+  40:13  error  'ConsensusTool' is not defined              no-undef
+  44:30  error  'ToolManager' is not defined                no-undef
+  47:34  error  'ExecutionEngine' is not defined            no-undef
+
+/data/chats/xpvnc/workspace/react_template/src/storage/ESConfigManager.js
+   38:44  error  'chrome' is not defined  no-undef
+   39:15  error  'chrome' is not defined  no-undef
+   60:44  error  'chrome' is not defined  no-undef
+   61:30  error  'chrome' is not defined  no-undef
+  110:44  error  'chrome' is not defined  no-undef
+  111:15  error  'chrome' is not defined  no-undef
+  143:44  error  'chrome' is not defined  no-undef
+  144:15  error  'chrome' is not defined  no-undef
+  163:44  error  'chrome' is not defined  no-undef
+  164:30  error  'chrome' is not defined  no-undef
+  182:44  error  'chrome' is not defined  no-undef
+  183:15  error  'chrome' is not defined  no-undef
+  224:44  error  'chrome' is not defined  no-undef
+  225:15  error  'chrome' is not defined  no-undef
+  247:44  error  'chrome' is not defined  no-undef
+  248:30  error  'chrome' is not defined  no-undef
+  277:46  error  'chrome' is not defined  no-undef
+  278:17  error  'chrome' is not defined  no-undef
+  291:44  error  'chrome' is not defined  no-undef
+  292:15  error  'chrome' is not defined  no-undef
+
+✖ 31 problems (31 errors, 0 warnings)
+
+ ELIFECYCLE  Command failed with exit code 1.

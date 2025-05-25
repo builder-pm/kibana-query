@@ -1,0 +1,2 @@
+$ pwd
+/data/chats/xpvnc/workspace/react_template

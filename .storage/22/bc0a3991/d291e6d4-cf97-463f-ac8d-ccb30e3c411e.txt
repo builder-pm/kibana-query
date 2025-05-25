@@ -1,0 +1,40 @@
+$ cd /data/chats/xpvnc/workspace/uploads/browserbee-main && ls -la
+total 6302
+drwxr-xr-x 244 root root 2162688 May 24 20:03 .
+drwxr-xr-x 245 root root 2166784 May 24 20:03 ..
+drwxr-xr-x   4 root root   12288 May 24 20:03 .github
+-rw-r--r--   1 root root     384 May 24 20:03 .gitignore
+-rw-r--r--   1 root root       0 May 24 20:03 .nojekyll
+-rw-r--r--   1 root root   12415 May 24 20:03 ARCHITECTURE.md
+-rw-r--r--   1 root root    1972 May 24 20:03 CONTRIBUTING.md
+-rw-r--r--   1 root root   11353 May 24 20:03 LICENSE
+-rw-r--r--   1 root root   12749 May 24 20:03 README.md
+-rw-r--r--   1 root root    2490 May 24 20:03 ROADMAP.md
+drwxr-xr-x  50 root root  200704 May 24 20:03 browserbee-main
+drwxr-xr-x  39 root root  745472 May 24 20:03 docs
+-rw-r--r--   1 root root  194763 May 24 20:03 package-lock.json
+-rw-r--r--   1 root root    1625 May 24 20:03 package.json
+drwxr-xr-x   9 root root   61440 May 24 20:03 public
+-rw-r--r--   1 root root    4562 May 24 20:03 reattach-button.png
+drwxr-xr-x 132 root root  856064 May 24 20:03 src
+-rw-r--r--   1 root root     387 May 24 20:03 tailwind.config.js
+-rw-r--r--   1 root root     568 May 24 20:03 tsconfig.json
+-rw-r--r--   1 root root    1099 May 24 20:03 vite.config.ts
+$ cd /data/chats/xpvnc/workspace/react_template && ls -la
+
+total 320125
+drwxr-xr-x    23 root root    208896 May 24 20:22 .
+drwxr-xr-x 19063 root root 165187584 May 24 20:23 ..
+-rw-r--r--     1 root root       253 Mar  5 03:46 .gitignore
+-rw-r--r--     1 root root      1185 Mar  5 03:46 README.md
+-rw-r--r--     1 root root      1476 Mar  5 03:46 eslint.config.js
+-rw-r--r--     1 root root       284 Mar  5 03:46 index.html
+drwxr-xr-x 18706 root root 162242560 May 24 20:22 node_modules
+-rw-r--r--     1 root root       957 Mar  5 03:46 package.json
+-rw-r--r--     1 root root    119234 Mar  5 03:46 pnpm-lock.yaml
+-rw-r--r--     1 root root        80 Mar  5 03:46 postcss.config.js
+drwxr-xr-x     7 root root     24576 Mar  5 07:04 public
+drwxr-xr-x     5 root root     16384 Mar  5 07:04 src
+-rw-r--r--     1 root root       170 Mar  5 03:46 tailwind.config.js
+-rw-r--r--     1 root root      1160 Mar  5 03:46 template_config.json
+-rw-r--r--     1 root root       163 Mar  5 03:46 vite.config.js

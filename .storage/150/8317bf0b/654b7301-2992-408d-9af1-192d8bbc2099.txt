@@ -1,0 +1,10 @@
+$ pnpm i && pnpm run lint
+Lockfile is up to date, resolution step is skipped
+Packages: +393
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Done in 2.2s
+
+> react-template@0.0.0 lint /data/chats/xpvnc/workspace/react_template
+> eslint ./src --quiet
+
