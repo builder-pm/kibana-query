@@ -12,6 +12,13 @@ import { ApprovalRequest } from './components/ApprovalRequest';
 import { ProviderSelector } from './components/ProviderSelector';
 import { ConfigManager } from '../background/configManager';
 
+// Elasticsearch UI Components
+import { ESClusterControls } from './components/elasticsearch/ESClusterControls';
+import { QueryInputForm as ESQueryInputForm } from './components/elasticsearch/QueryInputForm'; // Alias to avoid name clash if any
+import { QueryResultDisplay as ESQueryResultDisplay } from './components/elasticsearch/QueryResultDisplay';
+import { ESClusterConfig } from '../services/elasticsearch/types';
+import { GenerateQueryResult } from '../agent/elasticsearch/ElasticsearchAgentCore'; // Direct import, ensure this path is correct
+
 export function SidePanel() {
   // State for tab status
   const [tabStatus, setTabStatus] = useState<'attached' | 'detached' | 'unknown' | 'running' | 'idle' | 'error'>('unknown');
@@ -26,6 +33,12 @@ export function SidePanel() {
 
   // State to track if any LLM providers are configured
   const [hasConfiguredProviders, setHasConfiguredProviders] = useState<boolean>(false);
+
+  // Elasticsearch UI State
+  const [esClusters, setEsClusters] = useState<ESClusterConfig[]>([]);
+  const [activeEsCluster, setActiveEsCluster] = useState<ESClusterConfig | null>(null);
+  const [esQueryResult, setEsQueryResult] = useState<GenerateQueryResult | null>(null);
+  const [esUiLoading, setEsUiLoading] = useState<boolean>(true);
   
   // Check if any providers are configured when component mounts
   useEffect(() => {
@@ -36,11 +49,52 @@ export function SidePanel() {
     };
     
     checkProviders();
+
+    const fetchInitialESData = async () => {
+      setEsUiLoading(true);
+      try {
+        const clustersResponse = await chrome.runtime.sendMessage({ type: 'GET_ES_CLUSTERS' });
+        let currentClusters: ESClusterConfig[] = [];
+        if (clustersResponse?.success && Array.isArray(clustersResponse.data)) {
+          currentClusters = clustersResponse.data;
+          setEsClusters(currentClusters);
+        } else {
+          console.error("Failed to fetch ES clusters:", clustersResponse?.message);
+          addSystemMessage("Error: Could not load Elasticsearch cluster configurations.");
+        }
+
+        const activeIdResponse = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_ES_CLUSTER_ID' });
+        if (activeIdResponse?.success && activeIdResponse.data && currentClusters.length > 0) {
+          const foundActiveCluster = currentClusters.find(c => c.id === activeIdResponse.data);
+          setActiveEsCluster(foundActiveCluster || currentClusters[0] || null); // Fallback to first or null
+        } else if (currentClusters.length > 0) {
+          // If no active ID stored, but clusters exist, set first as active by default
+          setActiveEsCluster(currentClusters[0]);
+          // Optionally, inform background to save this default active cluster
+          // await chrome.runtime.sendMessage({ type: 'SET_ACTIVE_ES_CLUSTER_ID', payload: { clusterId: currentClusters[0].id } });
+        } else {
+          setActiveEsCluster(null);
+        }
+
+      } catch (e: any) {
+        console.error("Error fetching initial ES data:", e);
+        addSystemMessage(`Error fetching Elasticsearch data: ${e.message}`);
+      } finally {
+        setEsUiLoading(false);
+      }
+    };
+
+    fetchInitialESData();
     
     // Listen for provider configuration changes
     const handleMessage = (message: any) => {
       if (message.action === 'providerConfigChanged') {
         checkProviders();
+      }
+      // Potentially listen for ES cluster config changes from options page if needed
+      // For instance, if options page sends a message after updating clusters:
+      if (message.type === 'ES_CLUSTER_CONFIG_UPDATED') {
+        fetchInitialESData(); // Re-fetch ES data
       }
     };
     
@@ -49,7 +103,7 @@ export function SidePanel() {
     return () => {
       chrome.runtime.onMessage.removeListener(handleMessage);
     };
-  }, []);
+  }, []); // `addSystemMessage` should be stable if from a hook, otherwise add to deps
 
   // Use custom hooks to manage state and functionality
   const { 
@@ -254,6 +308,78 @@ export function SidePanel() {
     // Update the tab status to idle
     setTabStatus('idle');
   };
+  
+  // Elasticsearch UI Handlers
+  const handleSetEsClusterActive = async (clusterId: string) => {
+    setEsUiLoading(true);
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'SET_ACTIVE_ES_CLUSTER_ID', payload: { clusterId } });
+      if (response?.success) {
+        const newActiveCluster = esClusters.find(c => c.id === clusterId);
+        setActiveEsCluster(newActiveCluster || null);
+        addSystemMessage(`Active Elasticsearch cluster set to: ${newActiveCluster?.name || 'None'}`);
+      } else {
+        addSystemMessage(`Error setting active ES cluster: ${response?.message || 'Unknown error'}`);
+      }
+    } catch (e: any) {
+      addSystemMessage(`Error setting active ES cluster: ${e.message}`);
+    } finally {
+      setEsUiLoading(false);
+    }
+  };
+
+  const handleOpenEsSettings = () => {
+    chrome.runtime.openOptionsPage();
+    // Consider also opening to the specific ES settings tab if possible/needed.
+  };
+
+  const handleEsQuerySubmit = async (queryText: string) => {
+    if (!activeEsCluster) {
+      addSystemMessage("Error: No active Elasticsearch cluster selected. Please select or configure one in settings.");
+      setEsQueryResult({ // Provide a specific error structure for display
+        userInput: queryText,
+        query: null,
+        errors: [{ step: 'Pre-flight', message: 'No active Elasticsearch cluster selected.' }]
+      });
+      return;
+    }
+    setIsProcessing(true); // Use existing isProcessing state
+    setEsQueryResult(null); // Clear previous results
+    addSystemMessage(`Generating Elasticsearch query for: "${queryText}" against cluster "${activeEsCluster.name}"`);
+
+    try {
+      // Using '*' as a placeholder for `indexPattern` for now.
+      // This should ideally be dynamically determined or user-provided.
+      const response = await chrome.runtime.sendMessage({ 
+        type: 'GENERATE_ES_QUERY', 
+        payload: { 
+          userInput: queryText, 
+          clusterId: activeEsCluster.id, 
+          indexPattern: '*' // Placeholder - should be configurable
+        } 
+      });
+
+      if (response?.success && response.data) {
+        setEsQueryResult(response.data);
+        if(response.data.errors && response.data.errors.length > 0) {
+            addSystemMessage(`ES Query generation completed with errors. Check results display.`);
+        } else if (!response.data.query) {
+            addSystemMessage(`ES Query generation did not produce a query. Check results display for details.`);
+        } else {
+             addSystemMessage(`Elasticsearch query generated successfully.`);
+        }
+      } else {
+        const errorMsg = response?.message || "Unknown error during ES query generation.";
+        addSystemMessage(`Error generating ES query: ${errorMsg}`);
+        setEsQueryResult({ userInput: queryText, query: null, errors: [{ step: 'GENERATE_ES_QUERY', message: errorMsg }] });
+      }
+    } catch (e: any) {
+      addSystemMessage(`Error generating ES query: ${e.message}`);
+      setEsQueryResult({ userInput: queryText, query: null, errors: [{ step: 'GENERATE_ES_QUERY', message: e.message }] });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Handle clearing history
   const handleClearHistory = () => {
@@ -293,73 +419,99 @@ export function SidePanel() {
           tabStatus={tabStatus}
         />
       </div>
-      <p className="text-sm text-gray-600 mt-2">
+      {/* <p className="text-sm text-gray-600 mt-2">
           What can I do for you today?
-        </p>
+        </p> */} {/* This line can be made conditional based on UI mode */}
       </header>
 
-      {hasConfiguredProviders ? (
-        <>
-          <div className="flex flex-col flex-grow gap-4 overflow-hidden md:flex-row shadow-sm">
-            <div className="card bg-base-100 shadow-md flex-1 flex flex-col overflow-hidden">
-              <OutputHeader 
-                onClearHistory={handleClearHistory}
-                onReflectAndLearn={handleReflectAndLearn}
-                isProcessing={isProcessing}
-              />
-              <div 
-                ref={outputRef}
-                className="card-body p-3 overflow-auto bg-base-100 flex-1"
-              >
-                <MessageDisplay 
-                  messages={messages}
-                  streamingSegments={streamingSegments}
-                  isStreaming={isStreaming}
+      {/* Main Content Area */}
+      <div className="flex flex-col flex-grow gap-4 overflow-hidden">
+        {hasConfiguredProviders ? (
+          <>
+            {/* Standard BrowserBee UI */}
+            <div className="card bg-base-100 shadow-md flex-1 flex flex-col overflow-hidden"> {/* Existing Output Area */}
+                <OutputHeader 
+                  onClearHistory={handleClearHistory}
+                  onReflectAndLearn={handleReflectAndLearn}
+                  isProcessing={isProcessing}
                 />
+                <div 
+                  ref={outputRef}
+                  className="card-body p-3 overflow-auto bg-base-100 flex-1"
+                >
+                  <MessageDisplay 
+                    messages={messages}
+                    streamingSegments={streamingSegments}
+                    isStreaming={isStreaming}
+                  />
+                </div>
+            </div>
+            
+            {/* Elasticsearch Query Helper Section */}
+            <div className="my-4 p-1 border-t border-gray-300"></div> {/* Divider */}
+            <h2 className="text-md font-semibold text-gray-700 mb-1">Elasticsearch Query Helper</h2>
+            
+            <ESClusterControls
+              activeCluster={activeEsCluster}
+              availableClusters={esClusters}
+              onSetClusterActive={handleSetEsClusterActive}
+              onOpenSettings={handleOpenEsSettings}
+              isLoading={esUiLoading}
+            />
+            <ESQueryInputForm
+              isProcessing={isProcessing} 
+              onSubmit={handleEsQuerySubmit}
+            />
+            {esQueryResult && !isProcessing && (
+              <div className="mt-1 overflow-y-auto" style={{maxHeight: 'calc(100vh - 450px)' /* Adjust as needed */}}> 
+                 <ESQueryResultDisplay result={esQueryResult} />
               </div>
+            )}
+             {isProcessing && esQueryResult === null && ( // Show loading indicator for ES query generation
+                <div className="p-4 text-center text-gray-500">Generating ES query...</div>
+            )}
+
+
+            {/* Existing UI Elements below main output, now potentially after ES section */}
+            <TokenUsageDisplay />
+            
+            {approvalRequests.map(req => (
+              <ApprovalRequest
+                key={req.requestId}
+                requestId={req.requestId}
+                toolName={req.toolName}
+                toolInput={req.toolInput}
+                reason={req.reason}
+                onApprove={handleApprove}
+                onReject={handleReject}
+              />
+            ))}
+            
+            <PromptForm 
+              onSubmit={handleSubmit}
+              onCancel={handleCancel}
+              isProcessing={isProcessing}
+              tabStatus={tabStatus}
+            />
+            <ProviderSelector isProcessing={isProcessing} />
+          </>
+        ) : (
+          <div className="flex flex-col flex-grow items-center justify-center">
+            <div className="text-center mb-6">
+              <h2 className="text-xl font-semibold mb-2">No LLM provider configured</h2>
+              <p className="text-gray-600 mb-4">
+                You need to configure an LLM provider before you can use BrowserBee.
+              </p>
+              <button 
+                onClick={navigateToOptions}
+                className="btn btn-primary"
+              >
+                Configure Providers
+              </button>
             </div>
           </div>
-          
-          {/* Add Token Usage Display */}
-          <TokenUsageDisplay />
-          
-          {/* Display approval requests */}
-          {approvalRequests.map(req => (
-            <ApprovalRequest
-              key={req.requestId}
-              requestId={req.requestId}
-              toolName={req.toolName}
-              toolInput={req.toolInput}
-              reason={req.reason}
-              onApprove={handleApprove}
-              onReject={handleReject}
-            />
-          ))}
-          
-          <PromptForm 
-            onSubmit={handleSubmit}
-            onCancel={handleCancel}
-            isProcessing={isProcessing}
-            tabStatus={tabStatus}
-          />
-          <ProviderSelector isProcessing={isProcessing} />
-        </>
-      ) : (
-        <div className="flex flex-col flex-grow items-center justify-center">
-          <div className="text-center mb-6">
-            <h2 className="text-xl font-semibold mb-2">No LLM provider configured</h2>
-            <p className="text-gray-600 mb-4">
-              You need to configure an LLM provider before you can use BrowserBee.
-            </p>
-            <button 
-              onClick={navigateToOptions}
-              className="btn btn-primary"
-            >
-              Configure Providers
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

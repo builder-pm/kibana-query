@@ -17,6 +17,7 @@ import { AboutSection } from './components/AboutSection';
 import { LLMProviderConfig } from './components/LLMProviderConfig';
 import { ModelPricingTable } from './components/ModelPricingTable';
 import { MemoryManagement } from './components/MemoryManagement';
+import { ElasticsearchSettings } from './components/elasticsearch/ElasticsearchSettings';
 
 export function Options() {
   // Function to process and sort model pricing data
@@ -295,6 +296,17 @@ export function Options() {
       {/* Model Pricing Table */}
       <ModelPricingTable getModelPricingData={getModelPricingData} />
       
+      {/* Elasticsearch Settings Section */}
+      <div className="my-6 p-4 border border-gray-300 rounded-lg bg-gray-50 shadow">
+        {/* The title "Elasticsearch Settings" is already part of the ElasticsearchSettings component, 
+            so we might not need another h2 here unless we want a different styling or hierarchy. 
+            For now, let's rely on the title within ElasticsearchSettings.tsx.
+            If a section title is needed here, it could be:
+            <h2 className="text-xl font-semibold mb-4 text-gray-700">Elasticsearch Configuration</h2>
+        */}
+        <ElasticsearchSettings />
+      </div>
+
       {/* Memory Management */}
       <MemoryManagement />
     </div>
