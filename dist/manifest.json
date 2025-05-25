@@ -13,18 +13,12 @@
       "16": "assets/icons/icon-16.png",
       "48": "assets/icons/icon-48.png"
     },
-    "default_title": "Open Elasticsearch Query Helper"
-  },
-  "side_panel": {
-    "default_path": "index.html"
-  },
-  "background": {
-    "service_worker": "background.js"
+    "default_popup": "index.html",
+    "default_title": "Elasticsearch Query Helper"
   },
   "permissions": [
     "storage",
-    "activeTab",
-    "sidePanel"
+    "activeTab"
   ],
   "host_permissions": [
     "http://*/",

@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueryLibraryManagement } from './QueryLibraryManagement';
-import { ESConnectionSetup } from './ESConnectionSetup'; // Placeholder for future
-// import { ESSchemaViewer } from './ESSchemaViewer'; // Placeholder for future
+import { ESConnectionSetup } from './ESConnectionSetup';
+import { ESSchemaViewer } from './ESSchemaViewer';
 
 export const ElasticsearchSettings: React.FC = () => {
   return (
@@ -22,16 +22,11 @@ export const ElasticsearchSettings: React.FC = () => {
         <ESConnectionSetup />
       </div>
 
-      {/* 
-      // Placeholder for ESSchemaViewer
+      {/* ESSchemaViewer Section */}
       <div className="mt-6 pt-6 border-t">
-        <h3 className="text-xl font-semibold text-gray-700 mb-3">Schema Viewer</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          View and manage Elasticsearch index schemas. (Coming Soon)
-        </p>
-        {/* <ESSchemaViewer /> * /}
+        {/* Title is part of ESSchemaViewer, so not repeating here unless different style needed */}
+        <ESSchemaViewer />
       </div>
-      */}
     </div>
   );
 };

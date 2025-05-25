@@ -1,5 +1,5 @@
 import { ESConfigManager } from '../../services/elasticsearch/ESConfigManager';
-import { QueryLibraryManager, ExampleQuery } from '../../services/elasticsearch/QueryLibraryManager'; // Added ExampleQuery import
+import { QueryLibraryManager, ExampleQuery } from '../../services/elasticsearch/QueryLibraryManager';
 import { ESConnectionManager } from '../../services/elasticsearch/ESConnectionManager';
 import { ESSchemaManager } from '../../services/elasticsearch/ESSchemaManager';
 import {
@@ -14,12 +14,16 @@ import {
   QueryBuilderOutput,
   ValidationToolOutput,
   ExplanationToolOutput,
-  // ExampleQuery // Already imported from QueryLibraryManager
-} from './tools'; // Assuming tools are exported from an index.ts in ./tools
+} from './tools';
+
+// Imports for LLMProvider initialization
+import { ConfigManager, ProviderConfig } from '../../background/configManager';
+import { createProvider } from '../../models/providers/factory';
+import { LLMProvider } from '../../models/providers/types';
 
 // Define an interface for configuration if needed in the future
 export interface ElasticsearchAgentCoreConfig {
-  // Add configuration properties here, e.g., API keys, model preferences for query generation
+  // Add configuration properties here
 }
 
 // Define a more comprehensive output structure for generateQuery
@@ -44,15 +48,20 @@ export interface GenerateQueryResult {
 export class ElasticsearchAgentCore {
   private esConfigManager: ESConfigManager;
   public queryLibraryManager: QueryLibraryManager;
-  private esConnectionManager: ESConnectionManager;
+  public esConnectionManager: ESConnectionManager; // Made public for ESMessageHandler
   private schemaManager: ESSchemaManager;
 
+  // LLM Provider
+  private llmProvider: LLMProvider | null = null;
+
   // Tool instances
-  private intentParserTool: ESIntentParserTool;
-  private schemaAnalyzerTool: SchemaAnalyzerTool;
-  private queryBuilderTool: ESQueryBuilderTool;
-  private validationTool: ESValidationTool;
-  private explanationTool: ExplanationTool;
+  // Definite assignment assertion used as they are initialized in initialize()
+  private intentParserTool!: ESIntentParserTool;
+  private schemaAnalyzerTool: SchemaAnalyzerTool; // No LLM needed
+  private queryBuilderTool!: ESQueryBuilderTool;
+  private validationTool: ESValidationTool; // No LLM needed
+  private explanationTool!: ExplanationTool;
+
 
   constructor(config?: ElasticsearchAgentCoreConfig) {
     this.esConfigManager = new ESConfigManager();
@@ -64,19 +73,54 @@ export class ElasticsearchAgentCore {
     this.esConnectionManager = new ESConnectionManager(this.esConfigManager);
     this.schemaManager = new ESSchemaManager(this.esConnectionManager);
 
-    // Initialize tools
-    this.intentParserTool = new ESIntentParserTool();
+    // Initialize tools that don't require LLMProvider here
     this.schemaAnalyzerTool = new SchemaAnalyzerTool();
-    this.queryBuilderTool = new ESQueryBuilderTool();
     this.validationTool = new ESValidationTool();
-    this.explanationTool = new ExplanationTool();
+    
+    // LLM-dependent tools are initialized in `initialize()`
 
     if (config) {
-      console.log("ElasticsearchAgentCore initialized with config:", config);
+      console.log("ElasticsearchAgentCore constructor completed with config:", config);
     } else {
-      console.log("ElasticsearchAgentCore initialized with all tools.");
+      console.log("ElasticsearchAgentCore constructor completed.");
     }
   }
+
+  public async initialize(): Promise<void> {
+    if (this.llmProvider) {
+        console.log("LLMProvider already initialized.");
+        return;
+    }
+
+    try {
+      const configManager = ConfigManager.getInstance();
+      // Assuming getProviderConfig correctly fetches and decrypts if necessary
+      const providerConfig = await configManager.getProviderConfig(); 
+
+      if (!providerConfig || !providerConfig.apiKey) {
+        console.error("LLM provider not configured with API key in ElasticsearchAgentCore. LLM-dependent tools will not be available.");
+        // Set a state or throw an error if critical
+        // For now, tools requiring llmProvider will not be instantiated.
+        return;
+      }
+      
+      this.llmProvider = await createProvider(providerConfig.provider, providerConfig);
+      console.log("LLMProvider initialized in ElasticsearchAgentCore:", providerConfig.provider);
+
+      // Now that llmProvider is initialized, instantiate tools that depend on it
+      this.intentParserTool = new ESIntentParserTool(this.llmProvider);
+      this.queryBuilderTool = new ESQueryBuilderTool(this.llmProvider);
+      this.explanationTool = new ExplanationTool(this.llmProvider);
+      
+      console.log("LLM-dependent Elasticsearch tools initialized.");
+
+    } catch (error) {
+      console.error("Error initializing LLMProvider in ElasticsearchAgentCore:", error);
+      // Handle error, perhaps by setting a state that LLM features are unavailable
+      // this.llmProvider remains null, and dependent tools remain uninitialized.
+    }
+  }
+
 
   public async generateQuery(userInput: string, clusterId: string, indexPattern?: string): Promise<GenerateQueryResult> {
     const errors: Array<{ step: string; message: string; details?: any }> = [];
@@ -87,6 +131,12 @@ export class ElasticsearchAgentCore {
     let validationResult: ValidationToolOutput | undefined;
     let explanationOutput: ExplanationToolOutput | undefined;
 
+    // Ensure LLM provider is ready before proceeding with LLM-dependent steps
+    if (!this.llmProvider || !this.intentParserTool || !this.queryBuilderTool || !this.explanationTool) {
+      errors.push({ step: 'initialization', message: 'LLMProvider or dependent tools are not initialized. Cannot generate query.' });
+      return this.compileResult(userInput, null, undefined, undefined, undefined, undefined, undefined, undefined, errors);
+    }
+
     try {
       // 1. Fetch schema
       try {
@@ -94,8 +144,6 @@ export class ElasticsearchAgentCore {
         if (!rawSchema || (typeof rawSchema === 'object' && Object.keys(rawSchema).length === 0)) {
             throw new Error('Fetched schema is empty or invalid.');
         }
-        // Assuming rawSchema has a 'mappings' property or is the mappings object itself.
-        // Adjust if schemaManager.getSchema returns just the mappings.
         const mappingsToAnalyze = rawSchema.mappings || rawSchema;
          if (!mappingsToAnalyze || typeof mappingsToAnalyze !== 'object' || Object.keys(mappingsToAnalyze).length === 0) {
           throw new Error('Mappings object is missing or empty in the fetched schema.');
@@ -106,27 +154,19 @@ export class ElasticsearchAgentCore {
         }
       } catch (e: any) {
         errors.push({ step: 'fetchSchema', message: e.message || 'Failed to fetch or analyze schema.' });
-        // Decide if we can proceed without schema or must return
-        // For now, let's allow proceeding, intent parser can work without schemaSummary
-        // but query builder might be less effective.
-        schemaAnalysis = { analyzedFields: [], fieldIndex: {}, errors: [e.message] }; // Provide a default empty analysis
+        schemaAnalysis = { analyzedFields: [], fieldIndex: {}, errors: [e.message] }; 
       }
 
-      // 2. (Optional) Get example queries
-      // For simplicity, getting all. A more targeted approach might be better.
-      const exampleQueries = (await this.queryLibraryManager.getExamples(undefined) as Record<string, ExampleQuery[]>);
-      let flatExampleQueries: ExampleQuery[] = [];
-      if (exampleQueries) {
-        flatExampleQueries = Object.values(exampleQueries).flat();
-      }
-
+      // 2. Get example queries
+      const exampleQueriesData = (await this.queryLibraryManager.getExamples(undefined) as Record<string, ExampleQuery[]>);
+      let flatExampleQueries: ExampleQuery[] = exampleQueriesData ? Object.values(exampleQueriesData).flat() : [];
 
       // 3. Parse intent
       try {
         const intentParserInput: IntentParserInput = {
           naturalLanguageInput: userInput,
           schemaSummary: schemaAnalysis?.schemaSummary,
-          exampleQueries: flatExampleQueries.slice(0, 5) // Limit examples for prompt size
+          exampleQueries: flatExampleQueries.slice(0, 5) 
         };
         parsedIntent = await this.intentParserTool.execute(intentParserInput);
         if (parsedIntent.errors && parsedIntent.errors.length > 0) {
@@ -134,7 +174,6 @@ export class ElasticsearchAgentCore {
         }
       } catch (e: any) {
         errors.push({ step: 'parseIntent', message: e.message || 'Failed to parse user intent.' });
-        // If intent parsing fails, we cannot proceed to build a query.
         return this.compileResult(userInput, null, undefined, undefined, undefined, undefined, parsedIntent, schemaAnalysis?.schemaSummary, errors);
       }
       
@@ -142,12 +181,11 @@ export class ElasticsearchAgentCore {
       try {
         queryBuilderOutput = await this.queryBuilderTool.execute({ 
             parsedIntent, 
-            schemaAnalysis: schemaAnalysis!, // schemaAnalysis is initialized even on error
-            exampleQueries: flatExampleQueries.slice(0,2) // Fewer examples for builder
+            schemaAnalysis: schemaAnalysis!, 
+            exampleQueries: flatExampleQueries.slice(0,2)
         });
         if (!queryBuilderOutput.query || (queryBuilderOutput.errors && queryBuilderOutput.errors.length > 0)) {
           errors.push({ step: 'buildQuery', message: 'Query building failed or returned errors.', details: queryBuilderOutput.errors });
-          // If query building fails, we cannot validate or explain.
           return this.compileResult(userInput, queryBuilderOutput?.query, queryBuilderOutput?.queryId, undefined, undefined, undefined, parsedIntent, schemaAnalysis?.schemaSummary, errors, queryBuilderOutput?.confidenceScore);
         }
       } catch (e: any) {
@@ -277,6 +315,28 @@ export class ElasticsearchAgentCore {
     } catch (e: any) {
       console.error('Error importing query library in ElasticsearchAgentCore:', e);
       return { success: false, message: e.message || 'Failed to import query library.' };
+    }
+  }
+
+  public async getESSchema(clusterId: string, indexPattern: string): Promise<any | { error: string }> { // Return type should be ESSchema from service types, but using 'any' to avoid import errors if not co-located or properly exported yet.
+    try {
+      // ESSchemaManager.getSchema returns ESSchema, which includes the analysis.
+      // The SchemaAnalysisOutput from the agent tool is slightly different.
+      // For now, we'll return the ESSchema from the service layer directly.
+      // The UI might need to adapt or this method could transform it.
+      const schema = await this.schemaManager.getSchema(clusterId, indexPattern);
+      if (!schema || (schema.source === 'mock' && schema.indexName.includes('mock-default'))) { // Check if it's the absolute fallback mock
+          // This indicates a significant problem if a specific index was requested.
+          // If schema.error is already part of ESSchema, that would be better.
+          // For now, we'll rely on the source and a basic check.
+          if (schema.mappings && Object.keys(schema.mappings.properties || {}).length === 0) {
+            return { error: `Failed to retrieve a valid schema for '${indexPattern}'. A default mock was returned due to previous errors.` };
+          }
+      }
+      return schema;
+    } catch (e: any) {
+      console.error(`Error in getESSchema for cluster ${clusterId}, pattern ${indexPattern}:`, e);
+      return { error: e.message || 'An unknown error occurred while fetching schema.' };
     }
   }
 }

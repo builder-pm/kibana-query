@@ -2,10 +2,10 @@
   "name": "react-template",
   "private": true,
   "version": "0.0.0",
-  "type": "module",  "scripts": {
-    "dev": "npm run copy-icons && vite",
-    "build": "npm run copy-icons && vite build",
-    "copy-icons": "node scripts/copy-icons.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
     "lint": "eslint ./src --quiet",
     "preview": "vite preview"
   },

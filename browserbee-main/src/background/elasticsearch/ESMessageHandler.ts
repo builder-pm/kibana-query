@@ -11,11 +11,16 @@ export class ESMessageHandler {
   private agentCore: ElasticsearchAgentCore;
 
   constructor() {
-    // ElasticsearchAgentCore's constructor initializes its own dependencies,
-    // including ESConfigManager and QueryLibraryManager.
-    // QueryLibraryManager's async loadAndInitializeLibrary is called within ElasticsearchAgentCore's constructor.
+    // ElasticsearchAgentCore's constructor initializes its own dependencies (managers, non-LLM tools).
+    // The LLM-dependent tools are initialized via the async `initialize` method.
     this.agentCore = new ElasticsearchAgentCore();
-    console.log('ESMessageHandler initialized with ElasticsearchAgentCore.');
+    this.agentCore.initialize().catch(error => {
+      // This error should be logged prominently as it affects core LLM functionality for ES tools.
+      console.error("FATAL: Error initializing ElasticsearchAgentCore's LLMProvider from ESMessageHandler:", error);
+      // Depending on desired behavior, could set a flag in agentCore or this handler
+      // to indicate that LLM-dependent ES features are unavailable.
+    });
+    console.log('ESMessageHandler created ElasticsearchAgentCore and initiated its async initialization.');
   }
 
   public async handleMessage(
@@ -212,6 +217,33 @@ export class ESMessageHandler {
           return true;
         } catch (e: any) {
           sendResponse({ success: false, message: e.message });
+          return false;
+        }
+
+      case 'GET_ES_SCHEMA':
+        try {
+          if (!message.payload || !message.payload.clusterId || !message.payload.indexPattern) {
+            throw new Error('Payload with clusterId and indexPattern is missing for GET_ES_SCHEMA');
+          }
+          const { clusterId, indexPattern } = message.payload;
+          console.log(`Handling GET_ES_SCHEMA for cluster: ${clusterId}, index pattern: ${indexPattern}`);
+          this.agentCore.getESSchema(clusterId, indexPattern)
+            .then(result => {
+              // The result from getESSchema can be ESSchema or { error: string }
+              if (result && (result as any).error) {
+                sendResponse({ status: 'error', message: (result as any).error });
+              } else {
+                sendResponse({ status: 'success', data: result });
+              }
+            })
+            .catch(e => {
+              console.error('Error in agentCore.getESSchema call:', e);
+              sendResponse({ status: 'error', message: e.message || 'Failed to get schema due to an internal error.' });
+            });
+          return true;
+        } catch (e: any) {
+          console.error('Error handling GET_ES_SCHEMA before calling agentCore:', e);
+          sendResponse({ status: 'error', message: e.message });
           return false;
         }
         

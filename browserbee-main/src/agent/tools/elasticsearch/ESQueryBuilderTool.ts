@@ -1,14 +1,12 @@
-import { ParsedIntent, SchemaAnalysisOutput, ExampleQuery, QueryBuilderInput, QueryBuilderOutput } from './types';
-// import { ExecutionEngine } from '../../../agent/ExecutionEngine'; // Would be imported if directly using ExecutionEngine
+import { ParsedIntent, SchemaAnalysisOutput, ExampleQuery, QueryBuilderInput, QueryBuilderOutput, AnalyzedField } from './types'; // Added AnalyzedField
+import { LLMProvider, ApiStream, StreamChunk } from '../../../models/providers/types'; // Adjusted path
 
 export class ESQueryBuilderTool {
-  // private executionEngine: ExecutionEngine;
+  private readonly llmProvider: LLMProvider;
 
-  // constructor(executionEngine: ExecutionEngine) {
-  //   this.executionEngine = executionEngine;
-  // }
-  constructor() {
-    console.log("ESQueryBuilderTool initialized.");
+  constructor(llmProvider: LLMProvider) {
+    this.llmProvider = llmProvider;
+    console.log("ESQueryBuilderTool initialized with LLMProvider.");
   }
 
   private constructSystemPrompt(): string {
@@ -79,175 +77,138 @@ Ensure the generated query is a valid Elasticsearch query.`;
 
   private buildSimpleQuery(parsedIntent: ParsedIntent, schemaAnalysis: SchemaAnalysisOutput): Record<string, any> {
     const esQuery: Record<string, any> = { query: { bool: { must: [], filter: [], should: [], must_not: [] } } };
-    let queryClauseUsed = false; // To track if any specific query clauses are added
-
-    parsedIntent.entities.forEach(entity => {
-      const fieldInfo = schemaAnalysis.fieldIndex && entity.field ? schemaAnalysis.fieldIndex[entity.field] : undefined;
-      let targetField = entity.field;
-
-      if (!targetField && (entity.type === 'keyword' || entity.type === 'search_term')) {
-        // Heuristic: if a common text field like 'message', 'content', or any 'text' type field exists, prefer it over _all
-        const commonTextField = schemaAnalysis.analyzedFields.find(f => 
-            f.fieldName === 'message' || f.fieldName === 'content' || (f.type === 'text' && !f.fieldName.includes('.'))
-        );
-        targetField = commonTextField ? commonTextField.fieldName : '_all'; // Default to _all if no better candidate
-      }
-      
-      if (!targetField) { // If still no target field (e.g. for non-keyword filters without a field)
-          console.warn(`Skipping entity ${entity.name} as no target field could be determined.`);
-          return; // Skip this entity
-      }
-
-
-      if (entity.type === 'keyword' || entity.type === 'search_term') {
-        esQuery.query.bool.must.push({ match: { [targetField]: entity.value } });
-        queryClauseUsed = true;
-      } else if (entity.type === 'filter') {
-        if (fieldInfo && (fieldInfo.type === 'long' || fieldInfo.type === 'integer' || fieldInfo.type === 'double' || fieldInfo.type === 'float' || fieldInfo.type === 'date')) {
-            if (typeof entity.value === 'object' && (entity.value.gte || entity.value.lte || entity.value.gt || entity.value.lt) ) {
-                 esQuery.query.bool.filter.push({ range: { [targetField]: entity.value } });
-            } else {
-                 esQuery.query.bool.filter.push({ term: { [targetField]: entity.value } });
-            }
-        } else {
-            // Default to term filter for keywords, boolean, etc.
-            // Use .keyword for text fields if available and intent is exact match
-            const keywordField = fieldInfo && fieldInfo.type === 'text' ? `${targetField}.keyword` : targetField;
-            // Check if schemaAnalysis.fieldIndex has this keywordField
-            const finalTargetField = schemaAnalysis.fieldIndex && schemaAnalysis.fieldIndex[keywordField] ? keywordField : targetField;
-            esQuery.query.bool.filter.push({ term: { [finalTargetField]: entity.value } });
-        }
-        queryClauseUsed = true;
-      }
-    });
-
-    parsedIntent.dateRanges?.forEach(dateRange => {
-      esQuery.query.bool.filter.push({ range: { [dateRange.field]: { ...dateRange.range } } });
-      queryClauseUsed = true;
-    });
-    
-    // Cleanup empty boolean clauses
-    if (esQuery.query.bool.must.length === 0) delete esQuery.query.bool.must;
-    if (esQuery.query.bool.filter.length === 0) delete esQuery.query.bool.filter;
-    if (esQuery.query.bool.should.length === 0) delete esQuery.query.bool.should;
-    if (esQuery.query.bool.must_not.length === 0) delete esQuery.query.bool.must_not;
-    if (Object.keys(esQuery.query.bool).length === 0) delete esQuery.query.bool;
-
-
-    if (parsedIntent.queryType === 'aggregation' || (parsedIntent.aggregationRequests && parsedIntent.aggregationRequests.length > 0)) {
-        esQuery.aggs = {};
-        parsedIntent.aggregationRequests?.forEach(agg => {
-            const aggBody: Record<string, any> = { ...agg.settings };
-            if (agg.field) { // Not all aggregations require a field (e.g. filter aggregation)
-                aggBody.field = agg.field;
-            }
-            // Example: Add default precision_threshold for cardinality if not specified
-            if (agg.type === 'cardinality' && (!agg.settings || agg.settings.precision_threshold === undefined)) {
-                aggBody.precision_threshold = 3000; 
-            }
-            esQuery.aggs[agg.name] = { [agg.type]: aggBody };
-        });
-        
-        if (!queryClauseUsed && Object.keys(esQuery.query).length === 0) {
-            delete esQuery.query; 
-            esQuery.size = 0; 
-        } else if (Object.keys(esQuery.query).length > 0 && parsedIntent.queryType === 'aggregation' && !queryClauseUsed) {
-            // If it's purely an aggregation intent but bool clause is empty, make it match_all
-            if (!esQuery.query.bool || Object.keys(esQuery.query.bool).length === 0) {
-                esQuery.query = { match_all: {} };
-            }
-        }
-    }
-
-
-    if (parsedIntent.sort && parsedIntent.sort.length > 0) {
-        esQuery.sort = parsedIntent.sort.map(s => ({ [s.field]: { order: s.order } }));
-    }
-    
-    if (!queryClauseUsed && !(esQuery.aggs && Object.keys(esQuery.aggs).length > 0 && !esQuery.query) && Object.keys(esQuery.query).length === 0) {
-      return { query: { match_all: {} } };
-    }
-    
-    // If the top-level query object is now empty (e.g. bool was deleted, no aggs, no sort) default to match_all
-    if (Object.keys(esQuery.query).length === 0 && !esQuery.aggs && !esQuery.sort) {
-        return { query: { match_all: {} } };
-    }
-
-
-    return esQuery;
-  }
-
+  // The buildSimpleQuery method is removed as per instructions. LLM will generate the query.
 
   async execute(input: QueryBuilderInput): Promise<QueryBuilderOutput> {
     const systemPrompt = this.constructSystemPrompt();
-    const userPrompt = this.constructUserPrompt(input);
+    const userPromptString = this.constructUserPrompt(input);
 
     console.log("ESQueryBuilderTool: System Prompt:", systemPrompt);
-    console.log("ESQueryBuilderTool: User Prompt (first 300 chars):", userPrompt.substring(0, 300));
-
-    // **Conceptual LLM Interaction (Simulated for this subtask)**
-    // const llmResponseString = await this.executionEngine.generateText(systemPrompt, userPrompt);
-
-    // Simulate LLM response: Build a simple query based on intent for more dynamic testing
-    const simulatedQueryObject = this.buildSimpleQuery(input.parsedIntent, input.schemaAnalysis);
-    const llmResponseString = JSON.stringify(simulatedQueryObject, null, 2); // Pretty print for readability
+    console.log("ESQueryBuilderTool: User Prompt (first 300 chars):", userPromptString.substring(0, 300));
     
-    console.log("ESQueryBuilderTool: Simulated DSL Query String:", llmResponseString);
+    const messages = [{ role: 'user' as const, content: userPromptString }];
+    
+    let accumulatedLLMResponse = "";
+    let llmError: string | null = null;
 
-    let generatedQuery: Record<string, any> | null = null;
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    let confidenceScore: number = 0.8; // Default simulated confidence
+    const output: QueryBuilderOutput = {
+        query: null,
+        queryId: `llm-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+        confidenceScore: 0.1, // Default low confidence
+        warnings: [],
+        errors: [],
+    };
 
     try {
-      generatedQuery = JSON.parse(llmResponseString);
+      const stream: ApiStream = this.llmProvider.createMessage(systemPrompt, messages); // No tools passed
+      for await (const chunk of stream) {
+        if (chunk.type === 'text' && chunk.text) {
+          accumulatedLLMResponse += chunk.text;
+        }
+      }
+    } catch (error: any) {
+      console.error("Error during LLM call in ESQueryBuilderTool:", error);
+      llmError = error.message || "LLM call failed";
+    }
 
-      if (generatedQuery && typeof generatedQuery === 'object') {
-        const hasQueryKey = Object.prototype.hasOwnProperty.call(generatedQuery, 'query');
-        const hasAggsKey = Object.prototype.hasOwnProperty.call(generatedQuery, 'aggs');
-        
+    const llmResponseString = accumulatedLLMResponse;
+    console.log("ESQueryBuilderTool: Actual LLM Response String:", llmResponseString);
+
+
+    if (llmError || !llmResponseString.trim()) {
+      output.errors?.push(llmError || "LLM response was empty.");
+      output.confidenceScore = 0.05;
+      console.error("ESQueryBuilderTool: Error from LLM or empty response.", output.errors);
+      return output;
+    }
+
+    try {
+      let cleanedResponseString = llmResponseString;
+
+      // 1. Improved Pre-Parsing Cleaning
+      cleanedResponseString = cleanedResponseString.replace(/^```json\s*|```\s*$/g, '').trim();
+      
+      const firstBrace = cleanedResponseString.indexOf('{');
+      const lastBrace = cleanedResponseString.lastIndexOf('}');
+
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        const potentialJson = cleanedResponseString.substring(firstBrace, lastBrace + 1);
+        try {
+          JSON.parse(potentialJson); 
+          cleanedResponseString = potentialJson; 
+          console.log("ESQueryBuilderTool: Extracted potential JSON block from LLM response.");
+        } catch (e) {
+          console.warn("ESQueryBuilderTool: Could not cleanly extract a JSON block, proceeding with original cleaned string (after markdown removal).");
+        }
+      }
+      
+      const parsedJson = JSON.parse(cleanedResponseString);
+      output.query = parsedJson;
+
+      // Basic validation from previous step
+      if (output.query && typeof output.query === 'object') {
+        const hasQueryKey = Object.prototype.hasOwnProperty.call(output.query, 'query');
+        const hasAggsKey = Object.prototype.hasOwnProperty.call(output.query, 'aggs');
         if (!hasQueryKey && !hasAggsKey) {
-          // Allow if other top-level keys like sort, size, from are present
-          const hasOtherKeys = ['sort', 'size', 'from', '_source', 'fields', 'script_fields', 'highlight', 'rescore', 'explain', 'version', 'seq_no_primary_term', 'stats', 'timeout', 'terminate_after', 'profile', 'pit', 'runtime_mappings', 'search_after', 'min_score', 'track_scores', 'track_total_hits', 'indices_boost'].some(key => Object.prototype.hasOwnProperty.call(generatedQuery, key));
+          const hasOtherKeys = ['sort', 'size', 'from', '_source', 'fields', 'script_fields', 'highlight', 'rescore', 'explain', 'version', 'seq_no_primary_term', 'stats', 'timeout', 'terminate_after', 'profile', 'pit', 'runtime_mappings', 'search_after', 'min_score', 'track_scores', 'track_total_hits', 'indices_boost'].some(key => Object.prototype.hasOwnProperty.call(output.query, key));
           if (!hasOtherKeys) {
-            warnings.push("Generated query does not have a top-level 'query' or 'aggs' key, nor other common top-level Elasticsearch keys. This might indicate an issue.");
-            confidenceScore *= 0.7;
+            output.warnings?.push("Generated query does not have a top-level 'query' or 'aggs' key, nor other common top-level Elasticsearch keys. This might indicate an issue.");
+            output.confidenceScore = (output.confidenceScore || 0.5) * 0.7;
           }
         }
-        if(input.parsedIntent.queryType === 'search' && !hasQueryKey && hasAggsKey && !Object.prototype.hasOwnProperty.call(generatedQuery, 'size')){
-            warnings.push("Intent was 'search' but only 'aggs' key found in query without 'size:0' or an explicit query clause. Results might be unexpected.");
-            confidenceScore *= 0.8;
+        if(input.parsedIntent.queryType === 'search' && !hasQueryKey && hasAggsKey && !Object.prototype.hasOwnProperty.call(output.query, 'size')){
+            output.warnings?.push("Intent was 'search' but only 'aggs' key found in query without 'size:0' or an explicit query clause. Results might be unexpected.");
+            output.confidenceScore = (output.confidenceScore || 0.5) * 0.8;
         }
         if(input.parsedIntent.queryType === 'aggregation' && hasQueryKey && !hasAggsKey){
-            warnings.push("Intent was 'aggregation' but only 'query' key found, no 'aggs'. The query might not perform aggregations as expected.");
-            confidenceScore *= 0.8;
+            output.warnings?.push("Intent was 'aggregation' but only 'query' key found, no 'aggs'. The query might not perform aggregations as expected.");
+            output.confidenceScore = (output.confidenceScore || 0.5) * 0.8;
         }
-
+        if (output.warnings?.length === 0) { // If no new warnings from these checks
+            output.confidenceScore = (input.parsedIntent.confidenceScore || 0.6) * 0.9;
+        } else {
+            output.confidenceScore = (input.parsedIntent.confidenceScore || 0.6) * 0.7;
+        }
       } else {
-        throw new Error("LLM response was not a valid JSON object.");
+        throw new Error("LLM response did not result in a valid JSON object after cleaning.");
+      }
+      console.log("ESQueryBuilderTool: Successfully parsed LLM response into query object.");
+
+    } catch (initialError: any) {
+      console.warn("ESQueryBuilderTool: Initial JSON parsing failed.", initialError.message);
+      console.log("ESQueryBuilderTool: Problematic string for QueryBuilder (first 200 chars):", llmResponseString.substring(0,200));
+      
+      const retryAttempted = false; // Conceptual retry placeholder
+      let retryError: any = null;
+
+      if (false) { // Placeholder for actual retry logic
+        // Conceptual: make another LLM call with a corrective prompt
+        // const correctivePrompt = `The previous JSON for an Elasticsearch query was malformed: "${llmResponseString.substring(0,500)}...". Please correct it. Original request context: User Intent: ${JSON.stringify(input.parsedIntent, null, 1)}, Schema Summary: ${input.schemaAnalysis.schemaSummary}. Provide ONLY the valid Elasticsearch DSL JSON.`;
+        // ... LLM call logic ...
+        // ... parsing and validation of corrected response ...
       }
 
-    } catch (e: any) {
-      console.error("ESQueryBuilderTool: Error parsing LLM response:", e);
-      errors.push(`Failed to parse LLM response as JSON: ${e.message}`);
-      generatedQuery = null;
-      confidenceScore = 0.1;
+      if (!retryAttempted || retryError || !output.query) {
+          output.errors?.push(`Failed to parse LLM response for query. Initial error: ${initialError.message}. ${retryError ? `Retry error: ${retryError.message}.` : ''} Response snippet: "${llmResponseString.substring(0, 200)}..."`);
+          output.query = null;
+          output.confidenceScore = 0.1;
+          console.error("ESQueryBuilderTool: Final query parsing attempt failed. Error state:", output.errors);
+      }
     }
     
-    // Adjust confidence based on intent's confidence
-    confidenceScore = (input.parsedIntent.confidenceScore || 0.6) * confidenceScore;
-    // If there were errors during parsing the intent, that should also lower confidence here.
+    // If there were errors during parsing the intent from a previous step, that should also lower confidence here.
     if (input.parsedIntent.errors && input.parsedIntent.errors.length > 0) {
-        confidenceScore *= 0.7;
+        output.confidenceScore = (output.confidenceScore || 0.5) * 0.7;
     }
+    
+    // Ensure warnings/errors are undefined if empty
+    if (output.warnings?.length === 0) output.warnings = undefined;
+    if (output.errors?.length === 0) output.errors = undefined;
+
+    // Final confidence score adjustment
+    output.confidenceScore = parseFloat((output.confidenceScore || 0).toFixed(2));
 
 
-    return {
-      query: generatedQuery,
-      queryId: `simulated-${Date.now()}-${Math.random().toString(36).substring(2,7)}`, // Placeholder ID
-      confidenceScore: parseFloat(confidenceScore.toFixed(2)),
-      warnings: warnings.length > 0 ? warnings : undefined,
-      errors: errors.length > 0 ? errors : undefined,
-    };
+    return output;
   }
 }
