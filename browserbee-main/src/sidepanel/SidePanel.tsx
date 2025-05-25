@@ -69,9 +69,11 @@ export function SidePanel() {
           setActiveEsCluster(foundActiveCluster || currentClusters[0] || null); // Fallback to first or null
         } else if (currentClusters.length > 0) {
           // If no active ID stored, but clusters exist, set first as active by default
-          setActiveEsCluster(currentClusters[0]);
-          // Optionally, inform background to save this default active cluster
-          // await chrome.runtime.sendMessage({ type: 'SET_ACTIVE_ES_CLUSTER_ID', payload: { clusterId: currentClusters[0].id } });
+          const defaultActiveCluster = currentClusters[0];
+          setActiveEsCluster(defaultActiveCluster);
+          // Ensure it's uncommented and active: Update the backend about this default choice.
+          await chrome.runtime.sendMessage({ type: 'SET_ACTIVE_ES_CLUSTER_ID', payload: { clusterId: defaultActiveCluster.id } });
+          console.log(`SidePanel: Default active cluster set to ${defaultActiveCluster.name} (ID: ${defaultActiveCluster.id}) and informed backend.`);
         } else {
           setActiveEsCluster(null);
         }
@@ -464,7 +466,7 @@ export function SidePanel() {
             />
             {esQueryResult && !isProcessing && (
               <div className="mt-1 overflow-y-auto" style={{maxHeight: 'calc(100vh - 450px)' /* Adjust as needed */}}> 
-                 <ESQueryResultDisplay result={esQueryResult} />
+                 <ESQueryResultDisplay result={esQueryResult} activeCluster={activeEsCluster} />
               </div>
             )}
              {isProcessing && esQueryResult === null && ( // Show loading indicator for ES query generation
