@@ -1,10 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ElasticsearchSidePanel from './components/ElasticsearchSidePanel';
 
 function App() {
   const [activeCluster, setActiveCluster] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [currentTab, setCurrentTab] = useState(null);
+
+  // Get current tab information when the sidepanel opens
+  useEffect(() => {
+    const getCurrentTab = async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB' });
+        if (response.tab) {
+          setCurrentTab(response.tab);
+        }
+      } catch (error) {
+        console.error('Error getting current tab:', error);
+      }
+    };
+
+    getCurrentTab();
+  }, []);
 
   // Handle connection to Elasticsearch cluster
   const handleClusterConnect = (clusterId) => {
@@ -36,6 +53,11 @@ function App() {
             <span>{isConnected ? 'Connected to: ' : 'Disconnected: '}{activeCluster}</span>
           </div>
         )}
+        {currentTab && (
+          <div className="text-xs mt-1 opacity-75 truncate">
+            Working on: {currentTab.title}
+          </div>
+        )}
       </header>
 
       <main className="flex-grow overflow-hidden">
@@ -45,11 +67,12 @@ function App() {
           showSettings={showSettings}
           setShowSettings={setShowSettings}
           onClusterConnect={handleClusterConnect}
+          currentTab={currentTab}
         />
       </main>
 
       <footer className="bg-gray-100 border-t text-center p-2 text-xs text-gray-500">
-        Powered by BrowserBee's Multi-Agent Architecture
+        Powered by BrowserBee's Multi-Agent Architecture • Side Panel Mode
       </footer>
     </div>
   );
