@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Elasticsearch Query Helper",
+  "version": "1.0.0",
+  "description": "Helps generate and execute Elasticsearch queries using natural language.",
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "48": "assets/icons/icon-48.png"
+    },
+    "default_popup": "index.html",
+    "default_title": "Elasticsearch Query Helper"
+  },
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://*/",
+    "https://*/"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

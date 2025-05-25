@@ -1,13 +1,3 @@
-node_modules/
-dist/
-build/
-out/
-bin/
-obj/
-*.o
-*.exe
-*.log
-logs/
 .env
 .env.local
 .env.production
@@ -15,9 +5,6 @@ logs/
 env/
 venv/
 ENV/
-.DS_Store
-.idea/
-*.iml
 .vscode/
 .vscode/extensions.json
 .temp/
