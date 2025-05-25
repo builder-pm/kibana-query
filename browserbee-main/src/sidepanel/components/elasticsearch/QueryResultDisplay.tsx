@@ -1,18 +1,25 @@
 import React, { useState, useRef } from 'react';
-import { GenerateQueryResult, ValidationResultItem } from '../../../agent/elasticsearch/types'; // Assuming types are here
+import { GenerateQueryResult, ValidationResultItem } from '../../../agent/elasticsearch/types';
+import { ESClusterConfig } from '../../../services/elasticsearch/types'; // Import ESClusterConfig
 
 interface QueryResultDisplayProps {
   result: GenerateQueryResult;
+  activeCluster: ESClusterConfig | null; // Added activeCluster prop
   // onExecuteQuery?: (queryId: string) => void; // Placeholder
   // onProvideFeedback?: (feedback: any) => void; // Placeholder
 }
 
-export const QueryResultDisplay: React.FC<QueryResultDisplayProps> = ({ result }) => {
+export const QueryResultDisplay: React.FC<QueryResultDisplayProps> = ({ result, activeCluster }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<Record<string, string>>({}); // e.g., {json: 'Copied!', curl: ''}
+  const [copyStatus, setCopyStatus] = useState<Record<string, string>>({}); 
   const queryRef = useRef<HTMLPreElement>(null);
 
   const handleCopyToClipboard = async (text: string, type: string) => {
+    if (!text) {
+        setCopyStatus({ ...copyStatus, [type]: 'Nothing to copy' });
+        setTimeout(() => setCopyStatus(prev => ({...prev, [type]: ''})), 2000);
+        return;
+    }
     try {
       await navigator.clipboard.writeText(text);
       setCopyStatus({ ...copyStatus, [type]: 'Copied!' });
@@ -24,15 +31,42 @@ export const QueryResultDisplay: React.FC<QueryResultDisplayProps> = ({ result }
     }
   };
 
-  const getCurlCommand = () => {
-    // This is a simplified cURL. Actual implementation might need active cluster info.
-    // For now, using a placeholder host.
-    const host = result.schemaSummary?.includes('localhost') ? 'http://localhost:9200' : 'YOUR_ELASTICSEARCH_HOST';
-    const index = result.parsedIntent?.originalInput.match(/index:(\S+)/)?.[1] || 'your_index';
-    return `curl -X POST "${host}/${index}/_search" -H "Content-Type: application/json" -d'\n${JSON.stringify(result.query, null, 2)}\n'`;
+  const getCurlCommand = (): string => {
+    if (!activeCluster) {
+      return `# Cannot generate cURL: No active Elasticsearch cluster selected.\n# Query: \n${JSON.stringify(result.query, null, 2)}`;
+    }
+    if (!result.query) {
+        return `# Cannot generate cURL: Query is null.`;
+    }
+
+    const { protocol, host, port, auth } = activeCluster;
+    const baseUrl = `${protocol}://${host}:${port}`;
+    
+    // Try to infer index from parsedIntent or schemaSummary, fallback to generic _search
+    let path = '/_search'; // Default path
+    if (result.parsedIntent?.entities?.some(e => e.type === 'index_pattern' && e.value)) {
+        const indexEntity = result.parsedIntent.entities.find(e => e.type === 'index_pattern' && e.value);
+        path = `/${indexEntity!.value}/_search`;
+    } else if (result.schemaSummary?.startsWith("Schema for:")){ // Heuristic if schemaSummary contains index name
+        const match = result.schemaSummary.match(/Schema for: (\S+)/);
+        if (match && match[1]){
+            path = `/${match[1]}/_search`;
+        }
+    }
+
+
+    let authPart = '';
+    if (auth.type === 'basic' && auth.username && auth.password) {
+      authPart = `-u "${auth.username}:${auth.password}" `;
+    }
+    // Note: API Key for cURL often means setting a 'Authorization: ApiKey <base64_encoded_key>' header.
+    // This simplified version only includes basic auth. A more complex setup would handle ApiKey header.
+
+    return `curl -X POST "${baseUrl}${path}" ${authPart}-H "Content-Type: application/json" -d'\n${JSON.stringify(result.query, null, 2)}\n'`;
   };
   
-  const getKibanaDevToolsCommand = () => {
+  const getKibanaDevToolsCommand = (): string => {
+    if (!result.query) return "";
     return `POST /your_index/_search\n${JSON.stringify(result.query, null, 2)}`;
   };
 
